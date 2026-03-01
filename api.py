@@ -16,9 +16,10 @@ def load_and_train():
         db_pass = os.getenv('DB_PASSWORD')
         
         conn = mysql.connector.connect(
-            host="mysql-326aceab-trickys2304-dce9.j.aivencloud.com",
+            host="mysql-326aceab-trickys2304-dce9.j.aivencloud.com", 
+            port=23847, 
             user="avnadmin",
-            password=db_pass,
+            password=os.getenv('DB_PASSWORD'),
             database="defaultdb",
             ssl_disabled=False,
             use_pure=True
@@ -76,3 +77,4 @@ def get_recommendation(product_name: str):
                     "confidence": round(row['confidence'] * 100, 2)
                 })
     return {"viewing": product_name, "recommendations": recommendations}
+
