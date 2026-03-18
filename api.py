@@ -11,7 +11,7 @@ rules = None
 
 def load_and_train():
     try:
-        # 1. Đọc dữ liệu từ file data.csv (Phải nằm cùng thư mục với api.py)
+        # Đọc dữ liệu từ file data.csv
         file_path = "data.csv"
         if not os.path.exists(file_path):
             print(f"--- Lỗi: Không tìm thấy file {file_path} ---")
@@ -20,20 +20,18 @@ def load_and_train():
         print(f"--- Đang đọc dữ liệu từ {file_path} ---")
         df = pd.read_csv(file_path)
 
-        # 2. Tiền xử lý dữ liệu: Gom nhóm sản phẩm theo từng đơn hàng (order_id)
-        # data.csv của ông có 3 cột: order_id, product_id, name
         transactions = df.groupby('order_id')['name'].apply(list).tolist()
 
-        # 3. Chuyển đổi dữ liệu sang dạng ma trận True/False cho FP-Growth
+        # Chuyển đổi dữ liệu sang dạng ma trận cho FP-Growth
         te = TransactionEncoder()
         te_ary = te.fit_transform(transactions)
         df_matrix = pd.DataFrame(te_ary, columns=te.columns_)
 
-        # 4. Chạy thuật toán FP-Growth (min_support = 1% đơn hàng)
+        # Chạy thuật toán FP-Growth (min_support = 1% đơn hàng)
         frequent_itemsets = fpgrowth(df_matrix, min_support=0.01, use_colnames=True)
         
         # 5. Sinh luật kết hợp
-        trained_rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1.0)
+        trained_rules = association_rules(frequent_itemsets, metric="lift", min_threshold=0.74)
         
         print(f"--- Training hoàn tất! Đã học được {len(trained_rules)} quy luật ---")
         return trained_rules
