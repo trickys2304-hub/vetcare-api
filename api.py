@@ -1,43 +1,45 @@
 import os
 from fastapi import FastAPI, HTTPException
 import pandas as pd
-# Không cần mysql-connector nữa nếu dùng CSV
 from mlxtend.preprocessing import TransactionEncoder
 from mlxtend.frequent_patterns import fpgrowth, association_rules
 
 app = FastAPI(title="VetCare AI Recommendation API")
 
+# Biến toàn cục lưu trữ luật kết hợp
 rules = None
 
 def load_and_train():
     try:
-        # CHỖ THAY ĐỔI QUAN TRỌNG: Đọc trực tiếp từ file data.csv ông vừa up lên
-        # Đảm bảo file data.csv nằm cùng thư mục với file api.py
-        if not os.path.exists('data.csv'):
-            print("Lỗi: Không tìm thấy file data.csv trong thư mục!")
+        # 1. Đọc dữ liệu từ file data.csv (Phải nằm cùng thư mục với api.py)
+        file_path = "data.csv"
+        if not os.path.exists(file_path):
+            print(f"--- Lỗi: Không tìm thấy file {file_path} ---")
             return None
             
-        df = pd.read_csv('data.csv')
-        
-        # Vì file data.csv của ông có 3 cột: order_id, product_id, name
-        # Thuật toán cần gom nhóm theo order_id để lấy danh sách tên sản phẩm
+        print(f"--- Đang đọc dữ liệu từ {file_path} ---")
+        df = pd.read_csv(file_path)
+
+        # 2. Tiền xử lý dữ liệu: Gom nhóm sản phẩm theo từng đơn hàng (order_id)
+        # data.csv của ông có 3 cột: order_id, product_id, name
         transactions = df.groupby('order_id')['name'].apply(list).tolist()
-        
+
+        # 3. Chuyển đổi dữ liệu sang dạng ma trận True/False cho FP-Growth
         te = TransactionEncoder()
         te_ary = te.fit_transform(transactions)
         df_matrix = pd.DataFrame(te_ary, columns=te.columns_)
-        
-        # Tính toán tập phổ biến (FP-Growth)
-        # min_support 0.01 là 1%, nếu ít gợi ý ông có thể hạ xuống 0.005
+
+        # 4. Chạy thuật toán FP-Growth (min_support = 1% đơn hàng)
         frequent_itemsets = fpgrowth(df_matrix, min_support=0.01, use_colnames=True)
         
-        # Tạo luật kết hợp
+        # 5. Sinh luật kết hợp
         trained_rules = association_rules(frequent_itemsets, metric="lift", min_threshold=1.0)
         
-        print(f"--- Training hoàn tất! Đã học được {len(trained_rules)} luật kết hợp ---")
+        print(f"--- Training hoàn tất! Đã học được {len(trained_rules)} quy luật ---")
         return trained_rules
+        
     except Exception as e:
-        print(f"Lỗi khi xử lý dữ liệu CSV: {e}")
+        print(f"--- Lỗi khi xử lý FP-Growth: {e} ---")
         return None
 
 @app.on_event("startup")
@@ -47,23 +49,26 @@ def startup_event():
 
 @app.get("/")
 def home():
-    return {"message": "API VetCare đang chạy từ file CSV!", "status": "Online"}
+    return {
+        "message": "API VetCare đang chạy từ file CSV thành công!",
+        "status": "Online",
+        "rules_count": len(rules) if rules is not None else 0
+    }
 
 @app.get("/recommend")
 def get_recommendation(product_name: str):
     global rules
     if rules is None or rules.empty:
-        # Nếu chưa có luật nào, trả về danh sách rỗng thay vì báo lỗi 503 để Web không bị treo
-        return {"viewing": product_name, "recommendations": [], "message": "Chưa tìm thấy quy luật nào."}
+        return {"viewing": product_name, "recommendations": [], "message": "Hệ thống chưa nạp được dữ liệu luật."}
     
-    # Tìm các luật mà 'product_name' nằm trong phần tiền đề (antecedents)
+    # Tìm các luật mà product_name nằm trong 'antecedents'
     results = rules[rules['antecedents'].apply(lambda x: product_name in x)]
     
     if results.empty:
         return {"viewing": product_name, "recommendations": []}
     
     recommendations = []
-    # Lấy top 5 kết quả có độ tin cậy (confidence) cao nhất
+    # Lấy Top 5 gợi ý có độ tin cậy cao nhất
     top_results = results.sort_values(by='confidence', ascending=False).head(5)
     
     for _, row in top_results.iterrows():
